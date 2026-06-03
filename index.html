@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N-Body Gravity Simulator</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;height:100vh;width:100vw}
+canvas{display:block;position:absolute;top:0;left:0;z-index:1}
+#ui{position:absolute;top:0;left:0;z-index:10;padding:12px;pointer-events:none;width:100%}
+#ui>*{pointer-events:auto}
+.panel{background:rgba(10,10,30,0.85);border:1px solid rgba(100,140,255,0.3);border-radius:8px;padding:12px;margin-bottom:8px;backdrop-filter:blur(6px)}
+#controls{position:absolute;top:12px;left:12px;width:280px;max-height:calc(100vh - 24px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(100,140,255,0.3) transparent}
+#controls::-webkit-scrollbar{width:4px}
+#controls::-webkit-scrollbar-thumb{background:rgba(100,140,255,0.3);border-radius:2px}
+#info-panel{position:absolute;top:12px;right:12px;width:240px}
+#bottom-bar{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center}
+h2{font-size:13px;color:#8ab4ff;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+label{display:block;font-size:11px;color:#8899bb;margin:6px 0 2px}
+select,input[type=range]{width:100%;background:rgba(20,20,50,0.8);border:1px solid rgba(100,140,255,0.3);color:#e0e0e0;border-radius:4px;padding:4px 6px;font-size:12px}
+input[type=range]{-webkit-appearance:none;height:6px;padding:0;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#5588ff;border:none;cursor:pointer}
+.btn{background:rgba(60,100,220,0.3);border:1px solid rgba(100,140,255,0.4);color:#aac8ff;border-radius:4px;padding:5px 10px;font-size:11px;cursor:pointer;transition:all .15s}
+.btn:hover{background:rgba(80,120,255,0.4);border-color:rgba(120,160,255,0.6)}
+.btn.active{background:rgba(80,140,255,0.5);border-color:#6699ff;color:#fff}
+.btn-row{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0}
+.btn-row .btn{flex:1;text-align:center;min-width:50px}
+.value-display{font-size:11px;color:#66aaff;text-align:right;margin-top:-2px}
+#stats{font-size:11px;color:#667799;line-height:1.6}
+#stats span{color:#99aacc}
+#body-info{font-size:11px;line-height:1.7;color:#99aacc}
+#body-info .label{color:#667799}
+#body-info .val{color:#aac8ff;font-weight:600}
+#preset-btns .btn{margin:2px 0;width:100%;text-align:left}
+.section{border-top:1px solid rgba(100,140,255,0.15);margin-top:8px;padding-top:8px}
+#mode-indicator{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:10;background:rgba(10,10,30,0.8);border:1px solid rgba(100,140,255,0.3);border-radius:20px;padding:4px 14px;font-size:11px;color:#8ab4ff;pointer-events:none;opacity:0;transition:opacity .3s}
+#mode-indicator.visible{opacity:1}
+#help-overlay{position:absolute;bottom:50px;left:50%;transform:translateX(-50%);z-index:10;background:rgba(10,10,30,0.9);border:1px solid rgba(100,140,255,0.3);border-radius:8px;padding:10px 16px;font-size:11px;color:#8899bb;pointer-events:none;white-space:nowrap}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="ui">
+<div id="controls" class="panel">
+<h2>Gravity Simulator</h2>
+<div class="btn-row">
+<button class="btn active" id="btn-add" onclick="setMode('add')">+ Add Body</button>
+<button class="btn" id="btn-pan" onclick="setMode('pan')">✋ Pan</button>
+<button class="btn" id="btn-select" onclick="setMode('select')">🔍 Select</button>
+</div>
+<div class="section">
+<label>Presets</label>
+<div id="preset-btns">
+<button class="btn" onclick="loadPreset('solar')">☀️ Solar System</button>
+<button class="btn" onclick="loadPreset('binary')">⭐ Binary Star</button>
+<button class="btn" onclick="loadPreset('threebody')">🌀 Three-Body</button>
+<button class="btn" onclick="loadPreset('galaxy')">🌌 Galaxy Collision</button>
+<button class="btn" onclick="loadPreset('figure8">∞ Figure-8</button>
+<button class="btn" onclick="loadPreset('clear')">🗑️ Clear All</button>
+</div>
+</div>
+<div class="section">
+<label>Time Speed: <span id="speed-val" class="value-display">1.0x</span></label>
+<input type="range" id="time-speed" min="0" max="5" step="0.1" value="1" oninput="updateSpeed()">
+<div class="btn-row">
+<button class="btn" onclick="setTimeSpeed(0)">⏸ Pause</button>
+<button class="btn" onclick="setTimeSpeed(0.2)">🐌 0.2x</button>
+<button class="btn" onclick="setTimeSpeed(1)">▶ 1x</button>
+<button class="btn" onclick="setTimeSpeed(3)">⏩ 3x</button>
+<button class="btn" onclick="setTimeSpeed(10)">⏭ 10x</button>
+</div>
+</div>
+<div class="section">
+<label>Gravitational Constant (G): <span id="g-val" class="value-display">1.0</span></label>
+<input type="range" id="g-const" min="0.1" max="10" step="0.1" value="1" oninput="updateG()">
+</div>
+<div class="section">
+<label>New Body Mass: <span id="mass-val" class="value-display">100</span></label>
+<input type="range" id="body-mass" min="1" max="1000" step="1" value="100" oninput="updateMassDisplay()">
+</div>
+<div class="section">
+<label>Color Mode</label>
+<div class="btn-row">
+<button class="btn active" id="color-mass" onclick="setColorMode('mass')">By Mass</button>
+<button class="btn" id="color-vel" onclick="setColorMode('velocity')">By Velocity</button>
+</div>
+</div>
+<div class="section">
+<label>Trail Length: <span id="trail-val" class="value-display">200</span></label>
+<input type="range" id="trail-len" min="0" max="1000" step="10" value="200" oninput="updateTrail()">
+</div>
+<div class="section">
+<div class="btn-row">
+<button class="btn" onclick="toggleTrails()">Toggle Trails</button>
+<button class="btn" onclick="toggleCollisions()">Toggle Collisions</button>
+</div>
+<div class="btn-row">
+<button class="btn" onclick="exportState()">📤 Export JSON</button>
+<button class="btn" onclick="importState()">📥 Import JSON</button>
+</div>
+</div>
+<div id="stats" class="section">
+Bodies: <span id="stat-bodies">0</span> | FPS: <span id="stat-fps">0</span><br>
+Zoom: <span id="stat-zoom">1.00x</span> | Time: <span id="stat-time">0.0s</span>
+</div>
+</div>
+<div id="info-panel" class="panel" style="display:none">
+<h2>Selected Body</h2>
+<div id="body-info"></div>
+</div>
+</div>
+<div id="mode-indicator">Click & drag to add body (set velocity)</div>
+<div id="help-overlay">Scroll to zoom | Right-click drag to pan | Click body to select</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Simulation state
+let bodies = [];
+let G = 1.0;
+let timeSpeed = 1.0;
+let paused = false;
+let showTrails = true;
+let collisions = true;
+let trailLength = 200;
+let colorMode = 'mass';
+let newBodyMass = 100;
+let simTime = 0;
+let mode = 'add';
+let selectedBody = null;
+
+// Camera
+let camX = 0, camY = 0, camZoom = 1;
+let isPanning = false, panStartX, panStartY, panCamX, panCamY;
+
+// Stars background
+let stars = [];
+for (let i = 0; i < 500; i++) {
+    stars.push({
+        x: Math.random() * 4000 - 2000,
+        y: Math.random() * 4000 - 2000,
+        size: Math.random() * 1.5 + 0.3,
+        brightness: Math.random() * 0.6 + 0.4,
+        parallax: Math.random() * 0.5 + 0.1
+    });
+}
+
+// Mouse state
+let mouseDown = false;
+let mouseStartX, mouseStartY;
+let mouseCurrentX, mouseCurrentY;
+let isDraggingBody = false;
+
+// FPS
+let frameCount = 0, lastFpsTime = performance.now(), fps = 0;
+
+// Body class
+class Body {
+    constructor(x, y, vx, vy, mass, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.mass = mass;
+        this.radius = Math.max(2, Math.pow(mass, 0.33) * 1.2);
+        this.color = color || this.massColor();
+        this.trail = [];
+        this.alive = true;
+    }
+    massColor() {
+        const t = Math.log10(this.mass + 1) / 4;
+        const r = Math.floor(100 + 155 * Math.min(1, t * 2));
+        const g = Math.floor(80 + 100 * (1 - Math.abs(t - 0.5) * 2));
+        const b = Math.floor(200 - 150 * t);
+        return `rgb(${r},${g},${b})`;
+    }
+    velocityColor() {
+        const v = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        const t = Math.min(1, v / 5);
+        const r = Math.floor(50 + 205 * t);
+        const g = Math.floor(200 - 150 * t);
+        const b = Math.floor(255 - 200 * t);
+        return `rgb(${r},${g},${b})`;
+    }
+    get displayColor() {
+        return colorMode === 'mass' ? this.massColor() : this.velocityColor();
+    }
+}
+
+function addBody(x, y, vx, vy, mass, color) {
+    bodies.push(new Body(x, y, vx, vy, mass, color));
+}
+
+// Physics
+function computeForces() {
+    const n = bodies.length;
+    for (let i = 0; i < n; i++) {
+        if (!bodies[i].alive) continue;
+        let fx = 0, fy = 0;
+        for (let j = 0; j < n; j++) {
+            if (i === j || !bodies[j].alive) continue;
+            const dx = bodies[j].x - bodies[i].x;
+            const dy = bodies[j].y - bodies[i].y;
+            const distSq = dx * dx + dy * dy;
+            const dist = Math.sqrt(distSq);
+            const minDist = bodies[i].radius + bodies[j].radius;
+            if (collisions && dist < minDist) {
+                mergeBodies(i, j);
+                continue;
+            }
+            const softenedDistSq = distSq + 100;
+            const f = G * bodies[i].mass * bodies[j].mass / softenedDistSq;
+            fx += f * dx / dist;
+            fy += f * dy / dist;
+        }
+        bodies[i].vx += fx / bodies[i].mass * 0.016 * timeSpeed;
+        bodies[i].vy += fy / bodies[i].mass * 0.016 * timeSpeed;
+    }
+}
+
+function mergeBodies(i, j) {
+    const a = bodies[i], b = bodies[j];
+    if (!a.alive || !b.alive) return;
+    const totalMass = a.mass + b.mass;
+    a.vx = (a.vx * a.mass + b.vx * b.mass) / totalMass;
+    a.vy = (a.vy * a.mass + b.vy * b.mass) / totalMass;
+    a.x = (a.x * a.mass + b.x * b.mass) / totalMass;
+    a.y = (a.y * a.mass + b.y * b.mass) / totalMass;
+    a.mass = totalMass;
+    a.radius = Math.max(2, Math.pow(totalMass, 0.33) * 1.2);
+    b.alive = false;
+}
+
+function updatePositions() {
+    for (let b of bodies) {
+        if (!b.alive) continue;
+        b.x += b.vx * 0.016 * timeSpeed;
+        b.y += b.vy * 0.016 * timeSpeed;
+        if (showTrails) {
+            b.trail.push({ x: b.x, y: b.y });
+            if (b.trail.length > trailLength) b.trail.shift();
+        }
+    }
+    bodies = bodies.filter(b => b.alive);
+}
+
+// Rendering
+function worldToScreen(wx, wy) {
+    return {
+        x: (wx - camX) * camZoom + W / 2,
+        y: (wy - camY) * camZoom + H / 2
+    };
+}
+
+function screenToWorld(sx, sy) {
+    return {
+        x: (sx - W / 2) / camZoom + camX,
+        y: (sy - H / 2) / camZoom + camY
+    };
+}
+
+function drawStars() {
+    for (let s of stars) {
+        const px = s.x - camX * s.parallax;
+        const py = s.y - camY * s.parallax;
+        const sx = ((px % 4000) + 4000) % 4000 - 2000;
+        const sy = ((py % 4000) + 4000) % 4000 - 2000;
+        const sp = worldToScreen(sx, sy);
+        if (sp.x < -10 || sp.x > W + 10 || sp.y < -10 || sp.y > H + 10) continue;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, s.size * camZoom * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(200,210,255,${s.brightness * 0.6})`;
+        ctx.fill();
+    }
+}
+
+function drawTrails() {
+    for (let b of bodies) {
+        if (b.trail.length < 2) continue;
+        ctx.beginPath();
+        const start = worldToScreen(b.trail[0].x, b.trail[0].y);
+        ctx.moveTo(start.x, start.y);
+        for (let i = 1; i < b.trail.length; i++) {
+            const p = worldToScreen(b.trail[i].x, b.trail[i].y);
+            ctx.lineTo(p.x, p.y);
+        }
+        ctx.strokeStyle = b.displayColor.replace('rgb', 'rgba').replace(')', ',0.3)');
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+}
+
+function drawBodies() {
+    for (let b of bodies) {
+        if (!b.alive) continue;
+        const sp = worldToScreen(b.x, b.y);
+        const r = Math.max(1, b.radius * camZoom);
+        // Glow
+        const grad = ctx.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, r * 3);
+        grad.addColorStop(0, b.displayColor.replace('rgb', 'rgba').replace(')', ',0.4)'));
+        grad.addColorStop(1, 'transparent');
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, r * 3, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        // Body
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = b.displayColor;
+        ctx.fill();
+        // Selection ring
+        if (selectedBody === b) {
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y, r + 4, 0, Math.PI * 2);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([3, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    }
+}
+
+function drawVelocityArrow() {
+    if (mode !== 'add' || !mouseDown || !isDraggingBody) return;
+    const start = worldToScreen(mouseStartX, mouseStartY);
+    const end = worldToScreen(mouseCurrentX, mouseCurrentY);
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.strokeStyle = 'rgba(100,200,255,0.7)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Arrowhead
+    const angle = Math.atan2(dy, dx);
+    const headLen = 10;
+    ctx.beginPath();
+    ctx.moveTo(end.x, end.y);
+    ctx.lineTo(end.x - headLen * Math.cos(angle - 0.4), end.y - headLen * Math.sin(angle - 0.4));
+    ctx.moveTo(end.x, end.y);
+    ctx.lineTo(end.x - headLen * Math.cos(angle + 0.4), end.y - headLen * Math.sin(angle + 0.4));
+    ctx.stroke();
+    // Mass label
+    const worldPos = screenToWorld(mouseCurrentX, mouseCurrentY);
+    const vel = Math.sqrt(Math.pow((worldPos.x - mouseStartX) * 0.05, 2) + Math.pow((worldPos.y - mouseStartY) * 0.05, 2));
+    ctx.font = '11px system-ui';
+    ctx.fillStyle = '#aac8ff';
+    ctx.fillText(`mass: ${newBodyMass} | v: ${vel.toFixed(2)}`, end.x + 12, end.y - 8);
+}
+
+function render() {
+    ctx.fillStyle = '#050510';
+    ctx.fillRect(0, 0, W, H);
+    drawStars();
+    if (showTrails) drawTrails();
+    drawBodies();
+    drawVelocityArrow();
+}
+
+// Main loop
+function loop() {
+    const now = performance.now();
+    frameCount++;
+    if (now - lastFpsTime >= 1000) {
+        fps = frameCount;
+        frameCount = 0;
+        lastFpsTime = now;
+        document.getElementById('stat-fps').textContent = fps;
+    }
+    if (!paused && timeSpeed > 0) {
+        computeForces();
+        updatePositions();
+        simTime += 0.016 * timeSpeed;
+    }
+    render();
+    updateStats();
+    if (selectedBody && selectedBody.alive) updateBodyInfo();
+    requestAnimationFrame(loop);
+}
+
+function updateStats() {
+    document.getElementById('stat-bodies').textContent = bodies.length;
+    document.getElementById('stat-zoom').textContent = camZoom.toFixed(2) + 'x';
+    document.getElementById('stat-time').textContent = simTime.toFixed(1) + 's';
+}
+
+function updateBodyInfo() {
+    const b = selectedBody;
+    if (!b || !b.alive) { document.getElementById('info-panel').style.display = 'none'; return; }
+    document.getElementById('info-panel').style.display = 'block';
+    const v = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+    const ke = 0.5 * b.mass * v * v;
+    document.getElementById('body-info').innerHTML = `
+        <div><span class="label">Position:</span> <span class="val">(${b.x.toFixed(1)}, ${b.y.toFixed(1)})</span></div>
+        <div><span class="label">Velocity:</span> <span class="val">(${b.vx.toFixed(3)}, ${b.vy.toFixed(3)})</span></div>
+        <div><span class="label">Speed:</span> <span class="val">${v.toFixed(3)}</span></div>
+        <div><span class="label">Mass:</span> <span class="val">${b.mass.toFixed(1)}</span></div>
+        <div><span class="label">Radius:</span> <span class="val">${b.radius.toFixed(1)}</span></div>
+        <div><span class="label">Kinetic E:</span> <span class="val">${ke.toFixed(1)}</span></div>
+    `;
+}
+
+// Controls
+function setMode(m) {
+    mode = m;
+    document.getElementById('btn-add').classList.toggle('active', m === 'add');
+    document.getElementById('btn-pan').classList.toggle('active', m === 'pan');
+    document.getElementById('btn-select').classList.toggle('active', m === 'select');
+    const ind = document.getElementById('mode-indicator');
+    ind.textContent = m === 'add' ? 'Click & drag to add body (drag sets velocity)' :
+                     m === 'pan' ? 'Drag to pan the view' :
+                     'Click a body to select it';
+    ind.classList.add('visible');
+    setTimeout(() => ind.classList.remove('visible'), 2000);
+}
+
+function updateSpeed() {
+    timeSpeed = parseFloat(document.getElementById('time-speed').value);
+    document.getElementById('speed-val').textContent = timeSpeed.toFixed(1) + 'x';
+    paused = timeSpeed === 0;
+}
+
+function setTimeSpeed(s) {
+    timeSpeed = s;
+    paused = s === 0;
+    document.getElementById('time-speed').value = s;
+    document.getElementById('speed-val').textContent = s.toFixed(1) + 'x';
+}
+
+function updateG() {
+    G = parseFloat(document.getElementById('g-const').value);
+    document.getElementById('g-val').textContent = G.toFixed(1);
+}
+
+function updateMassDisplay() {
+    newBodyMass = parseInt(document.getElementById('body-mass').value);
+    document.getElementById('mass-val').textContent = newBodyMass;
+}
+
+function setColorMode(m) {
+    colorMode = m;
+    document.getElementById('color-mass').classList.toggle('active', m === 'mass');
+    document.getElementById('color-vel').classList.toggle('active', m === 'velocity');
+}
+
+function updateTrail() {
+    trailLength = parseInt(document.getElementById('trail-len').value);
+    document.getElementById('trail-val').textContent = trailLength;
+}
+
+function toggleTrails() {
+    showTrails = !showTrails;
+    if (!showTrails) bodies.forEach(b => b.trail = []);
+}
+
+function toggleCollisions() {
+    collisions = !collisions;
+}
+
+function exportState() {
+    const state = {
+        bodies: bodies.map(b => ({
+            x: b.x, y: b.y, vx: b.vx, vy: b.vy, mass: b.mass, color: b.color
+        })),
+        G, timeSpeed, simTime, camX, camY, camZoom, trailLength, colorMode
+    };
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'gravity-sim-state.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importState() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = ev => {
+            try {
+                const state = JSON.parse(ev.target.result);
+                bodies = state.bodies.map(b => new Body(b.x, b.y, b.vx, b.vy, b.mass, b.color));
+                G = state.G || 1;
+                timeSpeed = state.timeSpeed || 1;
+                simTime = state.simTime || 0;
+                camX = state.camX || 0;
+                camY = state.camY || 0;
+                camZoom = state.camZoom || 1;
+                trailLength = state.trailLength || 200;
+                colorMode = state.colorMode || 'mass';
+                document.getElementById('g-const').value = G;
+                document.getElementById('time-speed').value = timeSpeed;
+                document.getElementById('trail-len').value = trailLength;
+                updateG(); updateSpeed(); updateTrail();
+            } catch (err) { alert('Invalid state file'); }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+// Presets
+function loadPreset(name) {
+    bodies = [];
+    selectedBody = null;
+    document.getElementById('info-panel').style.display = 'none';
+    const AU = 200;
+    const sunMass = 1000;
+
+    switch (name) {
+        case 'solar': {
+            addBody(0, 0, 0, 0, sunMass, '#ffcc33');
+            const planets = [
+                { name: 'Mercury', d: 0.39 * AU, m: 5, color: '#aaa' },
+                { name: 'Venus', d: 0.72 * AU, m: 20, color: '#e8cda0' },
+                { name: 'Earth', d: 1.0 * AU, m: 25, color: '#4488ff' },
+                { name: 'Mars', d: 1.52 * AU, m: 10, color: '#cc4422' },
+                { name: 'Jupiter', d: 5.2 * AU, m: 200, color: '#cc9966' },
+                { name: 'Saturn', d: 9.5 * AU, m: 150, color: '#ddcc88' },
+                { name: 'Uranus', d: 19.2 * AU, m: 60, color: '#88ccdd' },
+                { name: 'Neptune', d: 30 * AU, m: 55, color: '#4466ff' }
+            ];
+            for (let p of planets) {
+                const v = Math.sqrt(G * sunMass / p.d);
+                addBody(p.d, 0, 0, v, p.mass, p.color);
+            }
+            camZoom = 0.8;
+            break;
+        }
+        case 'binary': {
+            const m1 = 500, m2 = 500, d = 150;
+            const v = Math.sqrt(G * m2 / (2 * d)) * 0.8;
+            addBody(-d, 0, 0, -v, m1, '#ffaa33');
+            addBody(d, 0, 0, v, m2, '#ff6644');
+            camZoom = 1.5;
+            break;
+        }
+        case 'threebody': {
+            const m = 300;
+            addBody(0, -100, 0.5, 0.3, m, '#ff6666');
+            addBody(87, 50, -0.5, 0.1, m, '#66ff66');
+            addBody(-87, 50, 0, -0.4, m, '#6666ff');
+            camZoom = 1.5;
+            break;
+        }
+        case 'galaxy': {
+            // Two clusters colliding
+            for (let i = 0; i < 40; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const r = Math.random() * 120 + 20;
+                const v = Math.sqrt(G * 300 / r) * 0.7;
+                addBody(-200 + Math.cos(angle) * r, Math.sin(angle) * r,
+                    v * Math.sin(angle) + 0.3, -v * Math.cos(angle), 5 + Math.random() * 15,
+                    `hsl(${Math.random() * 40 + 20}, 80%, 60%)`);
+            }
+            for (let i = 0; i < 40; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const r = Math.random() * 120 + 20;
+                const v = Math.sqrt(G * 300 / r) * 0.7;
+                addBody(200 + Math.cos(angle) * r, Math.sin(angle) * r,
+                    v * Math.sin(angle) - 0.3, -v * Math.cos(angle), 5 + Math.random() * 15,
+                    `hsl(${Math.random() * 40 + 200}, 80%, 60%)`);
+            }
+            addBody(-200, 0, 0, 0, 300, '#ffcc44');
+            addBody(200, 0, 0, 0, 300, '#44ccff');
+            camZoom = 0.7;
+            break;
+        }
+        case 'figure8': {
+            // Figure-8 three-body solution (approximate)
+            const m = 200;
+            addBody(-97, 0, 0.466, 0.432, m, '#ff6666');
+            addBody(97, 0, 0.466, 0.432, m, '#66ff66');
+            addBody(0, 0, -0.932, -0.864, m, '#6666ff');
+            camZoom = 1.2;
+            break;
+        }
+        case 'clear':
+            break;
+    }
+    simTime = 0;
+}
+
+// Mouse events
+canvas.addEventListener('mousedown', e => {
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    mouseCurrentX = mouseCurrentX;
+
+    if (e.button === 2 || (e.button === 0 && mode === 'pan')) {
+        isPanning = true;
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+        panCamX = camX;
+        panCamY = camY;
+        e.preventDefault();
+        return;
+    }
+
+    if (e.button === 0) {
+        mouseDown = true;
+        const world = screenToWorld(sx, sy);
+        mouseStartX = world.x;
+        mouseStartY = world.y;
+        mouseCurrentX = world.x;
+        mouseCurrentY = world.y;
+        isDraggingBody = true;
+
+        if (mode === 'select') {
+            let closest = null, closestDist = Infinity;
+            for (let b of bodies) {
+                const dx = b.x - world.x;
+                const dy = b.y - world.y;
+                const d = Math.sqrt(dx * dx + dy * dy);
+                if (d < b.radius + 10 / camZoom && d < closestDist) {
+                    closest = b;
+                    closestDist = d;
+                }
+            }
+            selectedBody = closest;
+            if (closest) {
+                document.getElementById('info-panel').style.display = 'block';
+                updateBodyInfo();
+            } else {
+                document.getElementById('info-panel').style.display = 'none';
+            }
+        }
+    }
+});
+
+canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+
+    if (isPanning) {
+        camX = panCamX - (e.clientX - panStartX) / camZoom;
+        camY = panCamY - (e.clientY - panStartY) / camZoom;
+        return;
+    }
+
+    if (mouseDown && isDraggingBody) {
+        const world = screenToWorld(sx, sy);
+        mouseCurrentX = world.x;
+        mouseCurrentY = world.y;
+    }
+});
+
+canvas.addEventListener('mouseup', e => {
+    if (isPanning) { isPanning = false; return; }
+    if (mouseDown && isDraggingBody && mode === 'add') {
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const world = screenToWorld(sx, sy);
+        const vx = (world.x - mouseStartX) * 0.05;
+        const vy = (world.y - mouseStartY) * 0.05;
+        const speed = Math.sqrt(vx * vx + vy * vy);
+        if (speed > 0.01) {
+            addBody(mouseStartX, mouseStartY, vx, vy, newBodyMass);
+        } else {
+            addBody(mouseStartX, mouseStartY, 0, 0, newBodyMass);
+        }
+    }
+    mouseDown = false;
+    isDraggingBody = false;
+});
+
+canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    camZoom = Math.max(0.05, Math.min(50, camZoom * zoomFactor));
+}, { passive: false });
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// Keyboard
+document.addEventListener('keydown', e => {
+    if (e.key === ' ') { paused = !paused; timeSpeed = paused ? 0 : parseFloat(document.getElementById('time-speed').value) || 1; document.getElementById('time-speed').value = timeSpeed; updateSpeed(); }
+    if (e.key === '1') setMode('add');
+    if (e.key === '2') setMode('pan');
+    if (e.key === '3') setMode('select');
+    if (e.key === 'Delete' && selectedBody) { selectedBody.alive = false; bodies = bodies.filter(b => b.alive); selectedBody = null; document.getElementById('info-panel').style.display = 'none'; }
+});
+
+// Help overlay
+setTimeout(() => document.getElementById('help-overlay').style.opacity = '0', 5000);
+
+// Start
+loadPreset('solar');
+loop();
+</script>
+</body>
+</html>
