@@ -102,3 +102,10 @@ This project is licensed under the MIT License.
 ---
 
 *Built with ❤️ by [Mayank Basena](https://github.com/mayank-dev-15) · 15 · GSoC 2027 Aspirant*
+
+
+## Features
+
+- Real-time gravity simulation with n-body physics
+- Interactive controls for mass and velocity
+- Visual particle trails for trajectory tracking
